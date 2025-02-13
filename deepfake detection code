@@ -1,0 +1,44 @@
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import os
+import cv2
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
+from torchvision import datasets, transforms
+import timm
+from PIL import Image
+# Directories for real and manipulated videos
+real_videos_dir = "/kaggle/input/deep-fake-detection-dfd-entire-original-dataset/DFD_original sequences"
+manipulated_videos_dir = "/kaggle/input/deep-fake-detection-dfd-entire-original-dataset/DFD_manipulated_sequences/DFD_manipulated_sequences"
+
+# Output directories for extracted frames
+output_real_dir = "/kaggle/working/frames/real"
+output_manipulated_dir = "/kaggle/working/frames/manipulated"
+# Ensure output directories exist
+os.makedirs(output_real_dir, exist_ok=True)
+os.makedirs(output_manipulated_dir, exist_ok=True)
+def extract_frames_from_videos(videos_dir, output_dir, label, max_videos=50):
+    video_files = [f for f in os.listdir(videos_dir) if f.endswith(('.mp4', '.avi', '.mov', '.mkv'))]
+    video_files = video_files[:max_videos]  # Limit to max_videos
+
+    for video_file in video_files:
+        video_path = os.path.join(videos_dir, video_file)
+        cap = cv2.VideoCapture(video_path)
+        frame_count = 0
+        success, image = cap.read()
+
+        while success:
+            if frame_count % int(cap.get(cv2.CAP_PROP_FPS)) == 0:
+                frame_filename = f"{label}_{video_file}_frame{frame_count // int(cap.get(cv2.CAP_PROP_FPS))}.jpg"
+                frame_path = os.path.join(output_dir, frame_filename)
+                cv2.imwrite(frame_path, image)
+            success, image = cap.read()
+            frame_count += 1
+
+        cap.release()
+# Extract frames from 100 real and 100 manipulated videos
+extract_frames_from_videos(real_videos_dir, output_real_dir, "real", max_videos=100)
+extract_frames_from_videos(manipulated_videos_dir, output_manipulated_dir, "manipulated", max_videos=100)
+print("Frame extraction completed.")
