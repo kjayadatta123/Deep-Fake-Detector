@@ -1,0 +1,8 @@
+Problems/Challenges faced in the Project are as follows
+
+1)Dataset Issues – Large storage requirements, dataset bias, limited realistic deepfakes, and class imbalance affect training.
+2)Frame Extraction – Extracting frames from high-resolution videos is computationally expensive and slow.
+3)Face Detection – Detecting and cropping faces in every frame increases processing time.
+4)Slow Frame Extraction – Processing each frame from videos adds overhead.
+5)Real-time Detection Challenges – Inference delay makes deepfake detection slow in live scenarios.
+6)Time Complexity - Dataset Processing, Frame extraction, Face detection, Preprocessing, Model training, and Real-time inference.
