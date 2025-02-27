@@ -1,0 +1,93 @@
+import os
+import cv2
+import numpy as np
+import tensorflow as tf
+import torch
+from facenet_pytorch import MTCNN
+from flask import Flask, request, jsonify, render_template
+from tensorflow.keras.applications.xception import Xception
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.models import Model
+from concurrent.futures import ThreadPoolExecutor
+import time
+
+mtcnn = MTCNN()
+
+def extract_frames(video_path, output_folder):
+    cap = cv2.VideoCapture(video_path)
+    count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_path = os.path.join(output_folder, f"frame_{count}.jpg")
+        cv2.imwrite(frame_path, frame)
+        count += 1
+    cap.release()
+
+def detect_and_crop_faces(image_path):
+    img = cv2.imread(image_path)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    boxes, _ = mtcnn.detect(img_rgb)
+    if boxes is not None:
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box)
+            face = img_rgb[y1:y2, x1:x2]
+            face = cv2.resize(face, (224, 224))
+            return face
+    return None
+
+def load_xception_model():
+    base_model = Xception(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    x = Flatten()(base_model.output)
+    x = Dense(512, activation='relu')(x)
+    x = Dense(1, activation='sigmoid')(x)
+    model = Model(inputs=base_model.input, outputs=x)
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+app = Flask(__name__)
+model = load_xception_model()
+
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    start_time = time.time()
+    file = request.files['video']
+    video_path = os.path.join("uploads", file.filename)
+    os.makedirs("uploads", exist_ok=True)
+    file.save(video_path)
+    output_folder = "frames"
+    os.makedirs(output_folder, exist_ok=True)
+    extract_frames(video_path, output_folder)
+    
+    faces = []
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(detect_and_crop_faces, os.path.join(output_folder, img_name)) for img_name in os.listdir(output_folder)]
+        for future in futures:
+            face = future.result()
+            if face is not None:
+                faces.append(face)
+    
+    if faces:
+        faces = np.array(faces) / 255.0
+        predictions = model.predict(faces)
+        avg_prediction = np.mean(predictions)
+    else:
+        avg_prediction = 0
+    
+    result = "FAKE" if avg_prediction > 0.5 else "REAL"
+    print(f"Time taken: {time.time() - start_time:.2f} seconds")
+    return render_template("result.html", prediction=result)
+
+if __name__ == '__main__':
+    app.run(debug=True, use_reloader=False)
